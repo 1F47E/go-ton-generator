@@ -1,8 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"log"
-	"math/rand"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -17,27 +18,41 @@ func main() {
 
 	// generate N wallets
 	now := time.Now()
-	count := 10
+	count := 100
 	wg := sync.WaitGroup{}
-	wg.Add(count)
 	goodCnt := 0
-	for i := 0; i < count; i++ {
+	resCh := make(chan string)
+
+	// get num of cores
+	numCpu := runtime.NumCPU()
+	workPerG := int(count / numCpu)
+	wg.Add(numCpu)
+	for i := 0; i < numCpu; i++ {
 		go func() {
 			defer wg.Done()
-			// random sleep from 0.1 to 1 sec
-			time.Sleep(time.Duration(rand.Intn(1000)+100) * time.Millisecond)
-			words := wallet.NewSeed()
+			for j := 0; j < workPerG; j++ {
+				words := wallet.NewSeed()
 
-			w, _ := wallet.FromSeed(api, words, wallet.V4R2)
-			addr := w.Address().String()
+				w, _ := wallet.FromSeed(api, words, wallet.V4R2)
+				addr := w.Address().String()
 
-			// filter out addresses with - and _
-			if !strings.Contains(addr, "-") && !strings.Contains(addr, "_") {
-				log.Println("good wallet: ", addr)
-				goodCnt++
+				// filter out addresses with - and _
+				if strings.Contains(addr, "-") || strings.Contains(addr, "_") {
+					continue
+				}
+				resCh <- addr
 			}
 		}()
 	}
+
+	// read results
+	go func() {
+		for addr := range resCh {
+			fmt.Println(addr)
+		}
+	}()
+
 	wg.Wait()
+	close(resCh)
 	log.Printf("%d/%d good wallets generated in %s\n", goodCnt, count, time.Since(now))
 }

@@ -1,4 +1,4 @@
-module go-ton-generator
+module go-ton-gen
 
 go 1.19
 
